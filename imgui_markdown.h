@@ -224,6 +224,8 @@ namespace ImGui
     {
         ImFont*                 font;                               // ImGui font
         bool                    separator;                          // if true, an underlined separator is drawn after the header
+        ImU32                   color;                              // if non-zero, override the font colour
+        ImU32                   separatorColor;                     // if non-zero, override the seperator colour
     };
 
     // Configuration struct for Markdown
@@ -238,7 +240,12 @@ namespace ImGui
         MarkdownTooltipCallback* tooltipCallback = NULL;
         MarkdownImageCallback*  imageCallback = NULL;
         const char*             linkIcon = "";                      // icon displayd in link tooltip
-        MarkdownHeadingFormat   headingFormats[NUMHEADINGS] = { { NULL, true }, { NULL, true }, { NULL, true } };
+        MarkdownHeadingFormat   headingFormats[NUMHEADINGS] = { { NULL, true, 0 }, { NULL, true, 0 }, { NULL, true, 0 } };
+
+        ImFont*                 boldFont = NULL;
+        ImFont*                 italicFont = NULL;
+        ImFont*                 boldItalicFont = NULL;
+
         void*                   userData = NULL;
     };
 
@@ -351,10 +358,15 @@ namespace ImGui
             HAS_SQUARE_BRACKET_OPEN,
             HAS_SQUARE_BRACKETS,
             HAS_SQUARE_BRACKETS_ROUND_BRACKET_OPEN,
+
+            ITALIC_OPEN,
+            BOLD_OPEN,
+            BOLDITALIC_OPEN,
         };
         LinkState state = NO_LINK;
         TextBlock text;
         TextBlock url;
+        char startChar;
         bool isImage = false;
     };
 
@@ -405,14 +417,28 @@ namespace ImGui
                 ImGui::PushFont(fmt.font);
                 popFontRequired = true;
             }
+
+            if (fmt.color != 0)
+                ImGui::PushStyleColor(ImGuiCol_Text, fmt.color);
+
             const char* text = markdown_ + textStart + 1;
-            ImGui::NewLine();
+            //ImGui::NewLine();
             textRegion_.RenderTextWrapped(text, text + textSize - 1);
             if (fmt.separator)
             {
+                if (fmt.separatorColor != 0)
+                    ImGui::PushStyleColor(ImGuiCol_Separator, fmt.separatorColor);
+
                 ImGui::Separator();
+
+                if (fmt.separatorColor != 0)
+                    ImGui::PopStyleColor();
             }
-            ImGui::NewLine();
+            //ImGui::NewLine();
+
+            if (fmt.color != 0)
+                ImGui::PopStyleColor();
+
             if (popFontRequired)
             {
                 ImGui::PopFont();
@@ -499,82 +525,135 @@ namespace ImGui
             }
 
             // Test to see if we have a link
-            switch (link.state)
+            if (!line.isHeading)
             {
-            case Link::NO_LINK:
-                if (c == '[')
+                switch (link.state)
                 {
-                    link.state = Link::HAS_SQUARE_BRACKET_OPEN;
-                    link.text.start = i + 1;
-                    if (i > 0 && markdown_[i - 1] == '!')
+                case Link::NO_LINK:
+                    if (c == '[')
                     {
-                        link.isImage = true;
-                    }
-                }
-                break;
-            case Link::HAS_SQUARE_BRACKET_OPEN:
-                if (c == ']')
-                {
-                    link.state = Link::HAS_SQUARE_BRACKETS;
-                    link.text.stop = i;
-                }
-                break;
-            case Link::HAS_SQUARE_BRACKETS:
-                if (c == '(')
-                {
-                    link.state = Link::HAS_SQUARE_BRACKETS_ROUND_BRACKET_OPEN;
-                    link.url.start = i + 1;
-                }
-                break;
-            case Link::HAS_SQUARE_BRACKETS_ROUND_BRACKET_OPEN:
-                if (c == ')')
-                {
-                    // render previous line content
-                    line.lineEnd = link.text.start - (link.isImage ? 2 : 1);
-                    RenderLine(markdown_, line, textRegion, mdConfig_);
-                    line.leadSpaceCount = 0;
-                    link.url.stop = i;
-                    line.isUnorderedListStart = false;    // the following text shouldn't have bullets
-                    ImGui::SameLine(0.0f, 0.0f);
-                    if (link.isImage)   // it's an image, render it.
-                    {
-                        bool drawnImage = false;
-                        bool useLinkCallback = false;
-                        if (mdConfig_.imageCallback)
+                        link.state = Link::HAS_SQUARE_BRACKET_OPEN;
+                        link.text.start = i + 1;
+                        if (i > 0 && markdown_[i - 1] == '!')
                         {
-                            MarkdownImageData imageData = mdConfig_.imageCallback({ markdown_ + link.text.start, link.text.size(), markdown_ + link.url.start, link.url.size(), mdConfig_.userData, true });
-                            useLinkCallback = imageData.useLinkCallback;
-                            if (imageData.isValid)
-                            {
-                                ImGui::Image(imageData.user_texture_id, imageData.size, imageData.uv0, imageData.uv1, imageData.tint_col, imageData.border_col);
-                                drawnImage = true;
-                            }
-                        }
-                        if (!drawnImage)
-                        {
-                            ImGui::Text("( Image %.*s not loaded )", link.url.size(), markdown_ + link.url.start);
-                        }
-                        if (ImGui::IsItemHovered())
-                        {
-                            if (ImGui::IsMouseReleased(0) && mdConfig_.linkCallback && useLinkCallback)
-                            {
-                                mdConfig_.linkCallback({ markdown_ + link.text.start, link.text.size(), markdown_ + link.url.start, link.url.size(), mdConfig_.userData, true });
-                            }
-                            if (link.text.size() > 0 && mdConfig_.tooltipCallback)
-                            {
-                                mdConfig_.tooltipCallback({ { markdown_ + link.text.start, link.text.size(), markdown_ + link.url.start, link.url.size(), mdConfig_.userData, true }, mdConfig_.linkIcon });
-                            }
+                            link.isImage = true;
                         }
                     }
-                    else                 // it's a link, render it.
+                    else if (c == '*' || c == '_')
                     {
-                        textRegion.RenderLinkTextWrapped(markdown_ + link.text.start, markdown_ + link.text.start + link.text.size(), link, style, markdown_, mdConfig_, &linkHoverStart, false);
+                        if (markdown_[i + 1] == c && markdown_[i + 2] == c)
+                            link.state = Link::BOLDITALIC_OPEN;
+                        else if (markdown_[i + 1] == c)
+                            link.state = Link::BOLD_OPEN;
+                        else
+                            link.state = Link::ITALIC_OPEN;
+
+                        link.startChar = c;
+                        link.text.start = i + 1 + (link.state - Link::ITALIC_OPEN);
+                        i += (link.state - Link::ITALIC_OPEN);
                     }
-                    ImGui::SameLine(0.0f, 0.0f);
-                    // reset the link by reinitializing it
-                    link = Link();
-                    line.lastRenderPosition = i;
                     break;
+                case Link::HAS_SQUARE_BRACKET_OPEN:
+                    if (c == ']')
+                    {
+                        link.state = Link::HAS_SQUARE_BRACKETS;
+                        link.text.stop = i;
+                    }
+                    break;
+                case Link::HAS_SQUARE_BRACKETS:
+                    if (c == '(')
+                    {
+                        link.state = Link::HAS_SQUARE_BRACKETS_ROUND_BRACKET_OPEN;
+                        link.url.start = i + 1;
+                    }
+                    break;
+                case Link::HAS_SQUARE_BRACKETS_ROUND_BRACKET_OPEN:
+                    if (c == ')')
+                    {
+                        // render previous line content
+                        line.lineEnd = link.text.start - (link.isImage ? 2 : 1);
+                        RenderLine(markdown_, line, textRegion, mdConfig_);
+                        line.leadSpaceCount = 0;
+                        link.url.stop = i;
+                        line.isUnorderedListStart = false;    // the following text shouldn't have bullets
+                        ImGui::SameLine(0.0f, 0.0f);
+                        if (link.isImage)   // it's an image, render it.
+                        {
+                            bool drawnImage = false;
+                            bool useLinkCallback = false;
+                            if (mdConfig_.imageCallback)
+                            {
+                                MarkdownImageData imageData = mdConfig_.imageCallback({ markdown_ + link.text.start, link.text.size(), markdown_ + link.url.start, link.url.size(), mdConfig_.userData, true });
+                                useLinkCallback = imageData.useLinkCallback;
+                                if (imageData.isValid)
+                                {
+                                    ImGui::Image(imageData.user_texture_id, imageData.size, imageData.uv0, imageData.uv1, imageData.tint_col, imageData.border_col);
+                                    drawnImage = true;
+                                }
+                            }
+                            if (!drawnImage)
+                            {
+                                ImGui::Text("( Image %.*s not loaded )", link.url.size(), markdown_ + link.url.start);
+                            }
+                            if (ImGui::IsItemHovered())
+                            {
+                                if (ImGui::IsMouseReleased(0) && mdConfig_.linkCallback && useLinkCallback)
+                                {
+                                    mdConfig_.linkCallback({ markdown_ + link.text.start, link.text.size(), markdown_ + link.url.start, link.url.size(), mdConfig_.userData, true });
+                                }
+                                if (link.text.size() > 0 && mdConfig_.tooltipCallback)
+                                {
+                                    mdConfig_.tooltipCallback({ { markdown_ + link.text.start, link.text.size(), markdown_ + link.url.start, link.url.size(), mdConfig_.userData, true }, mdConfig_.linkIcon });
+                                }
+                            }
+                        }
+                        else                 // it's a link, render it.
+                        {
+                            textRegion.RenderLinkTextWrapped(markdown_ + link.text.start, markdown_ + link.text.start + link.text.size(), link, style, markdown_, mdConfig_, &linkHoverStart, false);
+                        }
+                        ImGui::SameLine(0.0f, 0.0f);
+                        // reset the link by reinitializing it
+                        link = Link();
+                        line.lastRenderPosition = i;
+                        break;
+                    }
+                case Link::BOLD_OPEN:
+                case Link::ITALIC_OPEN:
+                case Link::BOLDITALIC_OPEN:
+                    if (c == link.startChar)
+                    {
+                        if (link.state == Link::BOLD_OPEN && markdown_[i + 1] != c)
+                            break;
+                        if (link.state == Link::BOLDITALIC_OPEN && markdown_[i + 1] != c && markdown_[i + 2] != c)
+                            break;
+
+                        int length = link.state - Link::ITALIC_OPEN;
+
+                        // render previous line content
+                        line.lineEnd = link.text.start - (length + 1);
+                        RenderLine(markdown_, line, textRegion, mdConfig_);
+                        line.leadSpaceCount = 0;
+                        link.text.stop = i;
+                        line.isUnorderedListStart = false;    // the following text shouldn't have bullets
+                        ImGui::SameLine(0.0f, 0.0f);
+
+                        if (link.state == Link::BOLD_OPEN)
+                            ImGui::PushFont(mdConfig_.boldFont);
+                        else if (link.state == Link::BOLDITALIC_OPEN)
+                            ImGui::PushFont(mdConfig_.boldItalicFont);
+                        else
+                            ImGui::PushFont(mdConfig_.italicFont);
+
+                        textRegion.RenderTextWrapped(markdown_ + link.text.start, markdown_ + link.text.start + link.text.size(), false);
+                        ImGui::PopFont();
+                        ImGui::SameLine(0.0f, 0.0f);
+                        // reset the link by reinitializing it
+                        i += length;
+                        link = Link();
+                        line.lastRenderPosition = i;
+
+                        break;
+                    }
                 }
             }
 
