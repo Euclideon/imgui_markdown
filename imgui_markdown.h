@@ -262,6 +262,7 @@ namespace ImGui
     struct TextRegion;
     struct Line;
     inline void UnderLine(ImColor col_);
+    inline void StrikeLine(ImColor col_);
     inline void RenderLine(const char* markdown_, Line& line_, TextRegion& textRegion_, const MarkdownConfig& mdConfig_);
 
     struct TextRegion
@@ -276,12 +277,18 @@ namespace ImGui
 
         // ImGui::TextWrapped will wrap at the starting position
         // so to work around this we render using our own wrapping for the first line
-        void RenderTextWrapped(const char* text_, const char* text_end_, bool bIndentToHere_ = false)
+        void RenderTextWrapped(const char* text_, const char* text_end_, bool bIndentToHere_ = false, bool bUnderline_ = false, bool bStrikethrough_ = false)
         {
             const float scale = 1.0f;
             float       widthLeft = GetContentRegionAvail().x;
             const char* endLine = ImGui::GetFont()->CalcWordWrapPositionA(scale, text_, text_end_, widthLeft);
             ImGui::TextUnformatted(text_, endLine);
+
+            if (bUnderline_)
+                ImGui::UnderLine(GetColorU32(ImGuiCol_Text));
+            else if (bStrikethrough_)
+                ImGui::StrikeLine(GetColorU32(ImGuiCol_Text));
+
             if (bIndentToHere_)
             {
                 float indentNeeded = GetContentRegionAvail().x - widthLeft;
@@ -302,6 +309,11 @@ namespace ImGui
                     endLine++;
                 }
                 ImGui::TextUnformatted(text_, endLine);
+
+                if (bUnderline_)
+                    ImGui::UnderLine(GetColorU32(ImGuiCol_Text));
+                else if (bStrikethrough_)
+                    ImGui::StrikeLine(GetColorU32(ImGuiCol_Text));
             }
         }
 
@@ -359,6 +371,7 @@ namespace ImGui
             HAS_SQUARE_BRACKETS,
             HAS_SQUARE_BRACKETS_ROUND_BRACKET_OPEN,
 
+            STRIKE_OPEN,
             ITALIC_OPEN,
             BOLD_OPEN,
             BOLDITALIC_OPEN,
@@ -376,7 +389,16 @@ namespace ImGui
         ImVec2 max = ImGui::GetItemRectMax();
         min.y = max.y;
         ImGui::GetWindowDrawList()->AddLine(min, max, col_, 1.0f);
-    }
+    };
+
+    inline void StrikeLine(ImColor col_)
+    {
+        ImVec2 min = ImGui::GetItemRectMin();
+        ImVec2 max = ImGui::GetItemRectMax();
+        min.y = (min.y + max.y) / 2;
+        max.y = min.y;
+        ImGui::GetWindowDrawList()->AddLine(min, max, col_, 1.0f);
+    };
 
     inline void RenderLine(const char* markdown_, Line& line_, TextRegion& textRegion_, const MarkdownConfig& mdConfig_)
     {
@@ -429,7 +451,7 @@ namespace ImGui
                 if (fmt.separatorColor != 0)
                     ImGui::PushStyleColor(ImGuiCol_Separator, fmt.separatorColor);
 
-                ImGui::Separator();
+                ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal);
 
                 if (fmt.separatorColor != 0)
                     ImGui::PopStyleColor();
@@ -499,7 +521,7 @@ namespace ImGui
                         line.headingCount++;
                         bool bContinueChecking = true;
                         uint32_t j = i;
-                        while (++j < (int)markdownLength_ && bContinueChecking)
+                        while (++j < (uint32_t)markdownLength_ && bContinueChecking)
                         {
                             c = markdown_[j];
                             switch (c)
@@ -538,6 +560,11 @@ namespace ImGui
                         {
                             link.isImage = true;
                         }
+                    }
+                    else if (i > 0 && c == '~' && markdown_[i - 1] == '~')
+                    {
+                        link.state = Link::STRIKE_OPEN;
+                        link.text.start = i + 1;
                     }
                     else if (c == '*' || c == '_')
                     {
@@ -615,8 +642,28 @@ namespace ImGui
                         // reset the link by reinitializing it
                         link = Link();
                         line.lastRenderPosition = i;
-                        break;
                     }
+                    break;
+                case Link::STRIKE_OPEN:
+                    if (c == '~' && markdown_[i - 1] == '~')
+                    {
+                        // render previous line content
+                        line.lineEnd = link.text.start - 2;
+                        RenderLine(markdown_, line, textRegion, mdConfig_);
+                        line.leadSpaceCount = 0;
+                        link.text.stop = i - 1;
+                        line.isUnorderedListStart = false;    // the following text shouldn't have bullets
+                        ImGui::SameLine(0.0f, 0.0f);
+
+                        textRegion.RenderTextWrapped(markdown_ + link.text.start, markdown_ + link.text.start + link.text.size(), false, false, true);
+
+                        ImGui::SameLine(0.0f, 0.0f);
+
+                        // reset the link by reinitializing it
+                        link = Link();
+                        line.lastRenderPosition = i;
+                    }
+                    break;
                 case Link::BOLD_OPEN:
                 case Link::ITALIC_OPEN:
                 case Link::BOLDITALIC_OPEN:
@@ -644,7 +691,8 @@ namespace ImGui
                         else
                             ImGui::PushFont(mdConfig_.italicFont);
 
-                        textRegion.RenderTextWrapped(markdown_ + link.text.start, markdown_ + link.text.start + link.text.size(), false);
+                        textRegion.RenderTextWrapped(markdown_ + link.text.start, markdown_ + link.text.start + link.text.size(), false, ImGui::GetFont() == ImGui::GetDefaultFont());
+
                         ImGui::PopFont();
                         ImGui::SameLine(0.0f, 0.0f);
                         // reset the link by reinitializing it
@@ -652,8 +700,8 @@ namespace ImGui
                         link = Link();
                         line.lastRenderPosition = i;
 
-                        break;
                     }
+                    break;
                 }
             }
 
