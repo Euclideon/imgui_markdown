@@ -506,7 +506,7 @@ namespace ImGui
                 {
                     line.isLeadingSpace = false;
                     line.lastRenderPosition = i - 1;
-                    if ((c == '*') && (line.leadSpaceCount >= 2))
+                    if ((c == '*' || c == '-') && (line.leadSpaceCount >= 2))
                     {
                         if (((int)markdownLength_ > i + 1) && (markdown_[i + 1] == ' '))    // space after '*'
                         {
