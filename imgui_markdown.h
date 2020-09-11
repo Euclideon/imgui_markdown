@@ -240,7 +240,7 @@ namespace ImGui
         MarkdownTooltipCallback* tooltipCallback = NULL;
         MarkdownImageCallback*  imageCallback = NULL;
         const char*             linkIcon = "";                      // icon displayd in link tooltip
-        MarkdownHeadingFormat   headingFormats[NUMHEADINGS] = { { NULL, true, 0 }, { NULL, true, 0 }, { NULL, true, 0 } };
+        MarkdownHeadingFormat   headingFormats[NUMHEADINGS] = { { NULL, true, 0, 0 }, { NULL, true, 0, 0 }, { NULL, true, 0, 0 } };
 
         ImFont*                 boldFont = NULL;
         ImFont*                 italicFont = NULL;
@@ -380,7 +380,7 @@ namespace ImGui
         TextBlock text;
         TextBlock url;
         char startChar;
-        bool isImage = false;
+        bool isImage;
     };
 
     inline void UnderLine(ImColor col_)
@@ -484,9 +484,9 @@ namespace ImGui
     {
         static const char* linkHoverStart = NULL; // we need to preserve status of link hovering between frames
         ImGuiStyle& style = ImGui::GetStyle();
-        Line        line;
-        Link        link;
-        TextRegion  textRegion;
+        Line        line = {};
+        Link        link = {};
+        TextRegion  textRegion = {};
 
         char c = 0;
         for (int i = 0; i < (int)markdownLength_; ++i)
