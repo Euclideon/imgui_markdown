@@ -395,7 +395,7 @@ namespace ImGui
     {
         ImVec2 min = ImGui::GetItemRectMin();
         ImVec2 max = ImGui::GetItemRectMax();
-        min.y = (min.y + max.y) / 2;
+        min.y = (max.y - min.y) * 0.6f + min.y;
         max.y = min.y;
         ImGui::GetWindowDrawList()->AddLine(min, max, col_, 1.0f);
     };
