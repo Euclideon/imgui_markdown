@@ -590,8 +590,16 @@ namespace ImGui
                 case Link::HAS_SQUARE_BRACKETS:
                     if (c == '(')
                     {
-                        link.state = Link::HAS_SQUARE_BRACKETS_ROUND_BRACKET_OPEN;
-                        link.url.start = i + 1;
+                        if (i > 0 && markdown_[i - 1] == ']')
+                        {
+                            link.state = Link::HAS_SQUARE_BRACKETS_ROUND_BRACKET_OPEN;
+                            link.url.start = i + 1;
+                        }
+                        else
+                        {
+                            // reset the link
+                            link = Link();
+                        }
                     }
                     break;
                 case Link::HAS_SQUARE_BRACKETS_ROUND_BRACKET_OPEN:
