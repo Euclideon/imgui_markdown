@@ -246,6 +246,8 @@ namespace ImGui
         ImFont*                 italicFont = NULL;
         ImFont*                 boldItalicFont = NULL;
 
+        ImU32                   linkTextColor = 0;
+
         void*                   userData = NULL;
     };
 
@@ -749,7 +751,7 @@ namespace ImGui
     inline bool TextRegion::RenderLinkText(const char* text_, const char* text_end_, const Link& link_, const ImGuiStyle& style_,
         const char* markdown_, const MarkdownConfig& mdConfig_, const char** linkHoverStart_)
     {
-        ImGui::PushStyleColor(ImGuiCol_Text, style_.Colors[ImGuiCol_ButtonHovered]);
+        ImGui::PushStyleColor(ImGuiCol_Text, mdConfig_.linkTextColor == 0 ? GetColorU32(style_.Colors[ImGuiCol_ButtonHovered]) : mdConfig_.linkTextColor);
         ImGui::PushTextWrapPos(-1.0f);
         ImGui::TextUnformatted(text_, text_end_);
         ImGui::PopTextWrapPos();
